@@ -1,0 +1,30 @@
+Code,Libellé
+10,Agriculteurs (salariés de leur exploitation)
+21,Artisans (salariés de leur entreprise)
+22,Commerçants et assimilés (salariés de leur entreprise)
+23,Chefs d'entreprise de 10 salariés ou plus (salariés de leur entreprise)
+31,Professions libérales (exercées sous statut de salarié)
+33,Cadres de la fonction publique
+34,"Professeurs, professions scientifiques"
+35,"Professions de l'information, des arts et des spectacles"
+37,Cadres administratifs et commerciaux d'entreprises
+38,Ingénieurs et cadres techniques d'entreprises
+42,"Professeurs des écoles, instituteurs et professions assimilées"
+43,Professions intermédiaires de la santé et du travail social
+44,"Clergé, religieux"
+45,Professions intermédiaires administratives de la fonction publique
+46,Professions intermédiaires administratives et commerciales des entreprises
+47,Techniciens (sauf techniciens tertiaires)
+48,"Contremaîtres, agents de maîtrise (maîtrise administrative exclue)"
+52,Employés civils et agents de service de la fonction publique
+53,"Policiers, militaires et agents de surveillance"
+54,Employés administratifs d'entreprise
+55,Employés de commerce
+56,Personnels des services directs aux particuliers
+62,Ouvriers qualifiés de type industriel
+63,Ouvriers qualifiés de type artisanal
+64,Chauffeurs
+65,"Ouvriers qualifiés de la manutention, du magasinage et du transport"
+67,Ouvriers non qualifiés de type industriel
+68,Ouvriers non qualifiés de type artisanal
+69,Ouvriers agricoles et assimilés

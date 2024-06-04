@@ -1,0 +1,956 @@
+---
+title: "EMSBD 6 - Apprentissage supervisé"
+subtitle: "projet 3"
+author: "Bruno KUBECZKA"
+date: "2024/04/15"
+abstract: "Le **projet 3** est un projet de **classification binaire** où il s'agit de prédire pour chaque individu une **catégorie** **B ou G**."
+date-format: "D MMMM YYYY"
+fontsize: 11pt
+editor: visual
+---
+
+```{python}
+#| label: librairies
+#| include: false
+
+from joblib import load
+import pandas as pd
+
+import toolbox_constantes as cst
+```
+
+```{python}
+#| label: chargement des fichiers joblib
+#| include: false
+
+# Dataset principal
+learn_X_raw = load(f"{cst.MODELS_DIR}/{cst.JOBLIB_001_LEARN_X_RAW}")
+learn_y_raw = load(f"{cst.MODELS_DIR}/{cst.JOBLIB_001_LEARN_Y_RAW}")
+
+# Train / eval split
+main_X_train = load(f"{cst.MODELS_DIR}/{cst.JOBLIB_002_MAIN_X_TRAIN}")
+main_y_train = load(f"{cst.MODELS_DIR}/{cst.JOBLIB_002_MAIN_Y_TRAIN}")
+main_X_eval = load(f"{cst.MODELS_DIR}/{cst.JOBLIB_002_MAIN_X_EVAL}")
+main_y_eval = load(f"{cst.MODELS_DIR}/{cst.JOBLIB_002_MAIN_Y_EVAL}")
+
+# modèles MAIN
+main_common_pipeline = load(f"{cst.MODELS_DIR}/{cst.JOBLIB_002_MAIN_COMMON_PIPELINE}")
+main_resample = load(f"{cst.MODELS_DIR}/{cst.JOBLIB_002_MAIN_RESAMPLE}")
+main_fitted_gradient_boosting = load(f"{cst.MODELS_DIR}/003_main_fitted_gradient_boosting.joblib")
+main_fitted_logistic_regression = load(f"{cst.MODELS_DIR}/003_main_fitted_logistic_regression.joblib")
+
+# modèle JOB
+job_common_pipeline = load(f"{cst.MODELS_DIR}/{cst.JOBLIB_002_JOB_COMMON_PIPELINE}")
+job_resample = load(f"{cst.MODELS_DIR}/{cst.JOBLIB_002_JOB_RESAMPLE}")
+job_fitted_gradient_boosting = load(f"{cst.MODELS_DIR}/003_job_fitted_gradient_boosting.joblib")
+job_fitted_logistic_regression = load(f"{cst.MODELS_DIR}/003_job_fitted_logistic_regression.joblib")
+```
+
+\newpage
+
+```{mermaid}
+%%| fig-width: 12
+%%| fig-height: 12
+%% fig-align: left
+
+
+flowchart TD
+
+    classDef default fill:#ffffff %% ,stroke:#333,stroke-width:4px;
+    classDef MAIN fill:#b0e2ff
+    classDef LEARN_MAIN fill:#8cb4cc
+    classDef LEARN_JOB fill:#a6d5f2
+
+    IN_DATASET[("\n<b>learn_dataset.csv</b>")] --> 
+    ETAPE_1["<b>ETAPE 1</b> : <i>001_make_dataset.py</i> \n\n Chargement des données\nCréation d'un jeu de donnée unique"]
+
+    IN_DATASET_EMP_CONTRACT[("\n<b>learn_dataset_Emp_contract.csv</b>")] --> ETAPE_1
+
+    IN_DATASET_SPORT[("\n<b>learn_dataset_sport.csv</b>")] --> ETAPE_1
+
+    IN_DATASET_JOB[("\n<b>learn_dataset_job.csv</b>")] --> ETAPE_1    
+
+    IN_DEPARTEMENTS[("\n<b>departements.csv</b>")] --> ETAPE_2_MAIN
+
+    IN_CITY[("\n<b>city_adm.csv \n city_pop.csv \n city_loc.csv</b>")] --> ETAPE_2_MAIN
+
+    %% colonne process
+    
+    ETAPE_1:::MAIN --> 
+    |learn_X_raw \n learn_y_raw| ETAPE_2_MAIN["<b>ETAPE 2</b> : <i>002_preprocessing_main.py</i> \n\n Split TRAIN - EVAL \n\n Feature engineering MAIN"]    
+
+    ETAPE_2_MAIN:::LEARN_MAIN -->
+    |main_X_train + main_y_train \n main_common_pipeline \n main_resample| ETAPE_3_MAIN("<b>ETAPE 3 : un fichier par modèle</b> \n\n Ajustement des modèles MAIN \n (sans les données JOB)") 
+    
+    ETAPE_2_MAIN --> |main_X_train + main_y_train| ETAPE_2_JOB["<b>ETAPE 2</b> : <i>002_preprocessing_job.py</i> \n\n Filtrage des individus \n (job_category est non NA) \n\n feature engineering JOB"]
+
+    ETAPE_2_MAIN --> |main_X_eval \n main_y_eval| ETAPE_5
+
+    
+    ETAPE_2_JOB:::LEARN_JOB -->
+    |job_X_train + job_y_train \n job_common_pipeline \n job_resample| ETAPE_3_JOB("<b>ETAPE 3 : un fichier par modèle</b> \n\n Ajustement des modèles JOB") 
+
+    ETAPE_3_MAIN:::LEARN_MAIN ---> ETAPE_3_MAIN_GB["<i>003_main_gradient_boosting</i>.py"] & ETAPE_3_MAIN_LR["<i>003_main_model_logistic_regression.py</i>"]
+
+    ETAPE_3_MAIN_GB:::LEARN_MAIN -->|main_fitted_gradient_boosting| ETAPE_4_MAIN["<b>ETAPE 4</b> : <i>004_main_best_model.py</i> \n\n Identification du meilleur modèle MAIN"]
+    
+    ETAPE_3_MAIN_LR:::LEARN_MAIN -->|main_fitted_logistic_regression| ETAPE_4_MAIN
+
+    ETAPE_3_JOB:::LEARN_JOB ---> ETAPE_3_JOB_GB["<i>003_job_model_gradient_boosting</i>.py"] & ETAPE_3_JOB_LR["<i>003_job_model_logistic_regression.py</i>"]
+
+    ETAPE_3_JOB_GB:::LEARN_JOB -->|job_fitted_gradient_boosting| ETAPE_4_JOB["<b>ETAPE 4</b> : <i>004_job_best_model.py</i> \n\n Identification du meilleur modèle JOB"]
+    
+    ETAPE_3_JOB_LR:::LEARN_JOB -->|job_fitted_logistic_regression| ETAPE_4_JOB
+
+    ETAPE_4_MAIN:::LEARN_MAIN ---> 
+    |main_best_model| ETAPE_5["<b>ETAPE 5</b> : <i>005_predictions.py</i> \n\n Choix du modèle final \n Mesure de la performance \\n Prédictions du jeu de données TEST"]
+
+    ETAPE_4_JOB:::LEARN_JOB ---> 
+    |job_best_model| ETAPE_5
+
+    IN_TEST[("\n<b>test_xxx.csv</b>")] --> ETAPE_5
+       
+    ETAPE_5:::MAIN --> 
+    OUT[\"<b> predictions.csv </b>"\]
+
+```
+
+\newpage
+
+# Projet
+
+## Démarche
+
+**Construction du jeu de données d'apprentissage**
+
+Les fichiers **learn_dataset.csv**, **learn_dataset_Emp_contract.csv**, **learn_dataset_sport.csv**, **learn_dataset_job.csv** sont unifiés dans un **dataframe unique** par une jointure sur l'identifiant de l'individu `Id` (cf.*fichier 001_make_dataset.py***)**
+
+Le jeu de données unifié est scindé en 2 jeux de données selon un tirage aléatoire effectué en respect de la distribution des cibles y (cf. fichier *002_preprocessing_main.py*).
+
+On en retire :
+
+-   un jeu de données **X et y TRAIN** : 80% des données du jeu de données unifié, tirées aléatoirement, vont être utilisées pour l'apprentissage des modèles
+
+-   un jeu de données **X et y EVAL** : les 20% restants sont conservés pour mesurer la performance du modèle final (cf. *fichier 005_predictions.py*)
+
+On note que le jeu de données *learn_job* est un sous-ensemble du dataset principal : les variables associées présentent un grand nombre de valeurs manquantes qu'il peut être compliqué d'imputer.
+
+Plutôt que d'imputer ces données manquantes issues de *learn_job*, on prend le parti de travailler le jeu de données sous **2 formes** :
+
+-   un **jeu de données MAIN** : ensemble des individus, [sans les colonnes amenées par le jeu de données Job]{.underline} (cf. fichier *001_preprocessing_main.py*)
+
+-   un **jeu de données JOB**, composé [uniquement des individus présents dans le jeu de données Job]{.underline}, en conservant l'ensemble des autres colonnes (cf. fichier *002_preprocessing_job.py*)
+
+**Feature Engineering**
+
+Pour chacun des jeux de données MAIN et JOB, un pipeline de traitement des variables est créé (cf. fichiers *002_preprocessing_main.py* et *002_preprocessing_job.py*) avec pour vocation
+
+-   de traiter les colonnes une par une par des `ColumnTransformer`
+
+    -   créant de nouvelles variables (feature engineering) (cf. @sec-feature-engineering - Feature Engineering)
+
+    -   imputant les valeurs manquantes (cf. @sec-feature-engineering - Feature Engineering)
+
+    -   supprimant la variable initiale si besoin
+
+-   de supprimer les colonnes non pertinentes
+
+    -   la colonne Id
+
+    -   toutes les colonnes issues de Job dans le cas du traitement de MAIN
+
+**Apprentissage**
+
+L'apprentissage, que ce soit sur le jeu de données MAIN (privées des colonnes JOB) ou sur le jeu de données JOB (uniquement les individus disposant d'une entrée job_category) respecte les mêmes règles
+
+-   2 modèles sont utilisés : une **régression logistique** et un **Gradient Boosting**
+
+-   Chaque entraînement de modèle est agencé de la façon suivante:
+
+    -   Construction d'un **pipeline** par la concaténation
+
+        -   d'une section *feature_engineering*, copie du pipeline de construction des features (cf. fichiers *002_preprocessing_main.py* et *002_preprocessing_job.py)*
+
+        -   d'une section *preprocessing* de traitement des features numériques et catégorielles spécifique au modèle considéré (cf.précisions ci-dessous)
+
+        -   d'une section *estimator*, instance du modèle considéré (GradientBoostingClassifier ou LogisticRegression)
+
+    -   **Entraînement du pipeline** effectué par un `GridSearchCV` :
+
+        -   selon une **plage d'hyper-paramètres** adaptée au modèle
+
+        -   stratégie de **rééchantillonnage en 5 blocs**
+
+        -   critère de scoring **accuracy** (`scoring="accuracy"`)
+
+        -   ajustement final automatique du modèle avec les hyper-paramètres qui ont donné le meilleur score (`refit=True`)
+
+Le **modèle de Gradient Boosting** complète le pipeline de la façon suivante
+
+-   toutes les **variables numériques** sont **maintenues en l'état** (`passthrough`)
+
+-   toutes les **variables catégorielles** sont **maintenues et transformées par un** `OneHotEncoder`, sans suppression de modalités (`drop=None,` le modèle n'étant pas sujet à des problèmes de colinéarité), en ignorant les modalités inconnues (`handle_unknown='ignore'`, toutes les colonnes de modalités passeront à 0)
+
+Le **modèle de régression logistique** complète le pipeline de la façon suivante
+
+-   Les colonnes entraînant des colinéarités sont supprimées (cf. @sec-feature-engineering - Feature Engineering)
+
+-   toutes les **variables numériques** sont **normalisées** (`StandardScaler`)
+
+-   toutes les **variables catégorielles** sont **maintenues et** **transformées par un** `OneHotEncoder`, en supprimant la 1ère modalité (`drop="first",` le modèle étant sujet à des problèmes de colinéarité) et en ignorant les modalités inconnues (`handle_unknown='ignore'`, toutes les colonnes de modalités passeront à 0)
+
+**Choix des meilleurs modèles MAIN et JOB**
+
+Une fois les 4 modèles entraînés, les **meilleurs modèles JOB et MAIN** sont identifiés en se basant sur le **score moyen obtenu après validation croisée** **en 5 blocs** (fichiers *004_main_best_model.py* et *004_job_best_model.py*).
+
+**Choix du modèle final et performance sur jeu de données d'évaluation**
+
+cf .fichier *005_predictions.py*
+
+En fonction des scores des meilleurs modèles MAIN et JOB, on choisit le meilleur modèle final (modèle MAIN seul ou combinaison MAIN+JOB) (cf. @sec-choix-modele-final - Choix du modèle final).
+
+C'est ce modèle final dont la performance est mesurée sur le jeu de données d'évaluation.
+
+**Prédiction du jeu de données de test**
+
+Les données *test_xxx.csv* sont prédites par le modèle final identifié (cf .fichier *005_predictions.py*)
+
+## Feature engineering {#sec-feature-engineering}
+
+Le feature engineering intégré dans les pipelines des modèles est implémenté dans les fichiers *toolbox_feature_engineering.py* et *toolbox_feature_engineering_job.py*.
+
+On y retrouve les mécanismes d'enrichissement et d'imputation des valeurs manquantes sous forme de `ColumnTransformer`.
+
+Dans les grandes lignes, les principes directeurs ont été
+
+-   `insee_code` a été exploitée pour introduire des **informations géographiques** telles que la taille, le nombre d'habitants, le département et la région de la commune de l'individu, ainsi que la distance de la commune à la "grande ville" la plus proche (capitale, préfecture, sous-préfecture selon les coordonnées de la commune)
+
+-   Les variables catégorielles composées de données hiérarchiques (`ACTIVITY_TYPE`, `HOUSEHOLD`, `OCCUPATION_42`) ont été supprimées au profit de plusieurs features représentant chaque niveau hiérarchique (par ex. `ACTIVITY_TYPE` devient `ACTIVITY_L1_` et `ACTIVITY_L2_`) :
+
+    -   Les arbres de décision des modèles Gradient Boosting ont ainsi à disposition toutes les granularités possibles pour optimiser leur choix.
+
+    -   Pour les modèles de régression logistique, seul le niveau hiérarchique le plus détaillé est maintenu par le pipeline (on évite ainsi les colinéarités)
+
+-   Les variables numériques sont maintenues en l'état et adaptées en fonction du modèle (notamment normalisées dans les modèles de régression logistique)
+
+-   `Club` introduisant un grand nombre de données manquantes a été exploitée pour créer une variable booléenne `SPORTIF_` sans données manquantes
+
+-   Une fois les jeux de données MAIN et JOB traités, les données manquantes se résument à quelques unités. Une imputation simple a été adoptée :
+
+    -   par la catégorie majoritaire pour les variables catégorielles
+
+    -   par la valeur médiane pour les variables numériques
+
+    La performance du modèle final étant satisfaisante, il n'a pas été nécessaire de travailler des imputations plus complexes (basées par ex. sur des corrélations entre covariables)
+
+## Prévention des fuites de données
+
+Pour **prévenir les fuites de données** pendant la phase d'apprentissage MAIN et JOB, on a pris plusieurs mesures :
+
+-   Classiquement, le jeu de données d'apprentissage unifié est scindé en un **jeu de données TRAIN** dédié à l'apprentissage des modèles, et un **jeu de données EVAL** dédié à la mesure de la performance du modèle final.
+
+-   Les modèles JOB et MAIN ont été entraînés par le **même jeu de données TRAIN** parce qu'évalués par le même jeu de données EVAL lors de la mesure de performance du modèle final.
+
+-   Tous les traitements des features sont **inclus dans les pipelines** afin qu'ils soient réappliqués à chaque itération de la validation croisée, sur les sous-ensembles d'apprentissage uniquement.
+
+# Apprentissage des modèles MAIN
+
+## Gradient boosting sur jeu de données MAIN
+
+Après apprentissage par GridSearchCV avec une méthode de rééchantillonnage à 5 blocs (cf. fichier *003_main_model_gradient_boosting.py*)
+
+**Grille d'hyper-paramètres**
+
+```{python}
+#| echo: false
+main_fitted_gradient_boosting.param_grid
+```
+
+**Meilleurs hyper-paramètres**
+
+```{python}
+#| echo: false
+main_fitted_gradient_boosting.best_params_
+```
+
+**Qualité de la généralisation**
+
+```{python}
+#| label : GB scores
+#| echo: false
+#| output: asis
+
+table_keys = [
+    "split0_test_score",
+    "split1_test_score",
+    "split2_test_score",
+    "split3_test_score",
+    "split4_test_score",
+    "mean_test_score",
+    "std_test_score",
+]
+
+table_values = [
+    main_fitted_gradient_boosting.cv_results_["split0_test_score"][
+        main_fitted_gradient_boosting.best_index_
+    ],
+    main_fitted_gradient_boosting.cv_results_["split1_test_score"][
+        main_fitted_gradient_boosting.best_index_
+    ],
+    main_fitted_gradient_boosting.cv_results_["split2_test_score"][
+        main_fitted_gradient_boosting.best_index_
+    ],
+    main_fitted_gradient_boosting.cv_results_["split3_test_score"][
+        main_fitted_gradient_boosting.best_index_
+    ],
+    main_fitted_gradient_boosting.cv_results_["split4_test_score"][
+        main_fitted_gradient_boosting.best_index_
+    ],
+    main_fitted_gradient_boosting.cv_results_["mean_test_score"][
+        main_fitted_gradient_boosting.best_index_
+    ],
+    main_fitted_gradient_boosting.cv_results_["std_test_score"][
+        main_fitted_gradient_boosting.best_index_
+    ],
+]
+
+table = { 
+    'clés': table_keys,
+    'valeurs': table_values }
+
+print(pd.DataFrame(table).to_markdown(index=False,tablefmt="grid"))
+
+```
+
+```{python}
+#| label: GB best score
+#| echo: false
+#| output: asis
+
+print(f'Le modèle propose un **score moyen de {main_fitted_gradient_boosting.best_score_*100:.2f}% de bonnes prédictions** sur les jeux de données de validation')
+```
+
+Les **scores par bloc** sont **homogènes** et présentent un **faible écart-type** : le modèle présente une **bonne aptitude à la généralisation**.
+
+## Régression logistique sur jeu de données MAIN
+
+Après apprentissage par GridSearchCV avec une méthode de rééchantillonnage à 5 blocs (cf. fichier *003_main_model_logistic_regression.py*)
+
+**Grille d'hyper-paramètres**
+
+```{python}
+#| echo: false
+main_fitted_logistic_regression.param_grid
+```
+
+**Meilleurs hyper-paramètres**
+
+```{python}
+#| echo: false
+main_fitted_logistic_regression.best_params_
+```
+
+**Qualité de la généralisation**
+
+```{python}
+#| label : LR scores
+#| echo: false
+#| output: asis
+
+table_keys = [
+    "split0_test_score",
+    "split1_test_score",
+    "split2_test_score",
+    "split3_test_score",
+    "split4_test_score",
+    "mean_test_score",
+    "std_test_score",
+]
+
+table_values = [
+    main_fitted_logistic_regression.cv_results_["split0_test_score"][
+        main_fitted_logistic_regression.best_index_
+    ],
+    main_fitted_logistic_regression.cv_results_["split1_test_score"][
+        main_fitted_logistic_regression.best_index_
+    ],
+    main_fitted_logistic_regression.cv_results_["split2_test_score"][
+        main_fitted_logistic_regression.best_index_
+    ],
+    main_fitted_logistic_regression.cv_results_["split3_test_score"][
+        main_fitted_logistic_regression.best_index_
+    ],
+    main_fitted_logistic_regression.cv_results_["split4_test_score"][
+        main_fitted_logistic_regression.best_index_
+    ],
+    main_fitted_logistic_regression.cv_results_["mean_test_score"][
+        main_fitted_logistic_regression.best_index_
+    ],
+    main_fitted_logistic_regression.cv_results_["std_test_score"][
+        main_fitted_logistic_regression.best_index_
+    ],
+]
+
+table = { 
+    'clés': table_keys,
+    'valeurs': table_values }
+
+print(pd.DataFrame(table).to_markdown(index=False,tablefmt="grid"))
+
+```
+
+```{python}
+#| label: LR best score
+#| echo: false
+#| output: asis
+
+print(f'Le modèle propose un **score moyen de {main_fitted_logistic_regression.best_score_*100:.2f}% de bonnes prédictions** sur les jeux de données de validation')
+```
+
+Les **scores par bloc** sont **homogènes** et présentent un **faible écart-type** : le modèle présente une **bonne aptitude à la généralisation**.
+
+## Choix du meilleur modèle MAIN
+
+```{python}
+#| label: LR tableau synthèse
+#| echo: false
+#| output: asis
+
+table_models_main = [
+    main_fitted_logistic_regression,
+    main_fitted_gradient_boosting,
+]
+
+table_keys = [
+    "Régression Logistique",
+    "Gradient Boosting",
+]
+
+table_values = [
+    main_fitted_logistic_regression.cv_results_["mean_test_score"][
+        main_fitted_logistic_regression.best_index_
+    ],
+    main_fitted_gradient_boosting.cv_results_["mean_test_score"][
+        main_fitted_gradient_boosting.best_index_
+    ],
+]
+
+table = {"modèles": table_keys, "scores moyens": table_values}
+
+print(pd.DataFrame(table).to_markdown(index=False))
+
+```
+
+```{python}
+#| label: LR final model best score
+#| echo: false
+#| output: asis
+
+best_model_index = table_values.index(max(table_values))
+
+main_best_model_name = table_keys[best_model_index]
+main_best_model = table_models_main[best_model_index]
+main_best_mean_score = table_values[best_model_index]
+
+print(f'Le meilleur modèle sur le jeu de données MAIN (sans données Job) est **{table_keys[best_model_index]}** avec un **score moyen de {table_values[best_model_index]*100:.2f}%** de bonnes prédictions.')
+```
+
+# Apprentissage des modèles JOB
+
+## Gradient boosting sur jeu de données JOB
+
+Après apprentissage par GridSearchCV avec une méthode de rééchantillonnage à 5 blocs (cf. fichier *003_job_model_gradient_boosting.py*)
+
+**Grille d'hyper-paramètres**
+
+```{python}
+#| echo: false
+job_fitted_gradient_boosting.param_grid
+```
+
+**Meilleurs hyper-paramètres**
+
+```{python}
+#| echo: false
+
+job_fitted_gradient_boosting.best_params_
+```
+
+**Qualité de la généralisation**
+
+```{python}
+#| label : Job GB scores
+#| echo: false
+#| output: asis
+
+table_keys = [
+    "split0_test_score",
+    "split1_test_score",
+    "split2_test_score",
+    "split3_test_score",
+    "split4_test_score",
+    "mean_test_score",
+    "std_test_score",
+]
+
+table_values = [
+    job_fitted_gradient_boosting.cv_results_["split0_test_score"][
+        job_fitted_gradient_boosting.best_index_
+    ],
+    job_fitted_gradient_boosting.cv_results_["split1_test_score"][
+        job_fitted_gradient_boosting.best_index_
+    ],
+    job_fitted_gradient_boosting.cv_results_["split2_test_score"][
+        job_fitted_gradient_boosting.best_index_
+    ],
+    job_fitted_gradient_boosting.cv_results_["split3_test_score"][
+        job_fitted_gradient_boosting.best_index_
+    ],
+    job_fitted_gradient_boosting.cv_results_["split4_test_score"][
+        job_fitted_gradient_boosting.best_index_
+    ],
+    job_fitted_gradient_boosting.cv_results_["mean_test_score"][
+        job_fitted_gradient_boosting.best_index_
+    ],
+    job_fitted_gradient_boosting.cv_results_["std_test_score"][
+        job_fitted_gradient_boosting.best_index_
+    ],
+]
+
+table = { 
+    'clés': table_keys,
+    'valeurs': table_values }
+
+print(pd.DataFrame(table).to_markdown(index=False,tablefmt="grid"))
+
+```
+
+```{python}
+#| label: job GB best score
+#| echo: false
+#| output: asis
+
+print(f'Le modèle propose un **score moyen de {job_fitted_gradient_boosting.best_score_*100:.2f}% de bonnes prédictions** sur les jeux de données de validation.')
+```
+
+Les **scores par bloc** sont **homogènes** et présentent un **faible écart-type** : le modèle présente une **bonne aptitude à la généralisation**.
+
+## Régression logistique sur jeu de données JOB
+
+Après apprentissage par GridSearchCV avec une méthode de rééchantillonnage à 5 blocs (cf. fichier *003_job_model_logistic_regression.py*)
+
+**Grille d'hyper-paramètres**
+
+```{python}
+#| echo: false
+job_fitted_logistic_regression.param_grid
+```
+
+**Meilleurs hyper-paramètres**
+
+```{python}
+#| echo: false
+job_fitted_logistic_regression.best_params_
+```
+
+**Qualité de la généralisation**
+
+```{python}
+#| label : job LR scores
+#| echo: false
+#| output: asis
+
+table_keys = [
+    "split0_test_score",
+    "split1_test_score",
+    "split2_test_score",
+    "split3_test_score",
+    "split4_test_score",
+    "mean_test_score",
+    "std_test_score",
+]
+
+table_values = [
+    job_fitted_logistic_regression.cv_results_["split0_test_score"][
+        job_fitted_logistic_regression.best_index_
+    ],
+    job_fitted_logistic_regression.cv_results_["split1_test_score"][
+        job_fitted_logistic_regression.best_index_
+    ],
+    job_fitted_logistic_regression.cv_results_["split2_test_score"][
+        job_fitted_logistic_regression.best_index_
+    ],
+    job_fitted_logistic_regression.cv_results_["split3_test_score"][
+        job_fitted_logistic_regression.best_index_
+    ],
+    job_fitted_logistic_regression.cv_results_["split4_test_score"][
+        job_fitted_logistic_regression.best_index_
+    ],
+    job_fitted_logistic_regression.cv_results_["mean_test_score"][
+        job_fitted_logistic_regression.best_index_
+    ],
+    job_fitted_logistic_regression.cv_results_["std_test_score"][
+        job_fitted_logistic_regression.best_index_
+    ],
+]
+
+table = { 
+    'clés': table_keys,
+    'valeurs': table_values }
+
+print(pd.DataFrame(table).to_markdown(index=False,tablefmt="grid"))
+
+```
+
+```{python}
+#| label: job LR best score
+#| echo: false
+#| output: asis
+
+print(f'Le modèle propose un **score moyen de {job_fitted_logistic_regression.best_score_*100:.2f}% de bonnes prédictions** sur les jeux de données de validation.')
+```
+
+Les **scores par bloc** sont **homogènes** et présentent un **faible écart-type** : le modèle présente une **bonne aptitude à la généralisation**.
+
+## Choix du meilleur modèle JOB
+
+```{python}
+#| label: job LR tableau synthèse
+#| echo: false
+#| output: asis
+
+table_models_job = [
+    job_fitted_logistic_regression,
+    job_fitted_gradient_boosting,
+]
+
+table_keys = [
+    "Régression Logistique",
+    "Gradient Boosting",
+]
+
+table_values = [
+    job_fitted_logistic_regression.cv_results_["mean_test_score"][
+        job_fitted_logistic_regression.best_index_
+    ],
+    job_fitted_gradient_boosting.cv_results_["mean_test_score"][
+        job_fitted_gradient_boosting.best_index_
+    ],
+]
+
+table = {"modèles": table_keys, "scores moyens": table_values}
+
+print(pd.DataFrame(table).to_markdown(index=False))
+
+```
+
+```{python}
+#| label: job LR final model best score
+#| echo: false
+#| output: asis
+
+best_model_index = table_values.index(max(table_values))
+
+job_best_model_name = table_keys[best_model_index]
+job_best_model = table_models_job[best_model_index]
+job_best_mean_score = table_values[best_model_index]
+
+print(f'Le meilleur modèle sur le jeu de données JOB est **{table_keys[best_model_index]}** avec un **score moyen de {table_values[best_model_index]*100:.2f}%** de bonnes prédictions.')
+```
+
+# Modèle final
+
+## Choix du modèle final {#sec-choix-modele-final}
+
+Après identification des meilleurs modèles sur les jeux de données MAIN et JOB, il s'agit de définir la stratégie de prédictions.
+
+```{python}
+#| label: choix du modèle final
+#| echo: false
+#| output: asis
+
+table_keys = [
+    "Meilleur modèle sur données MAIN",
+    "Meilleur modèle sur données JOB",
+]
+
+table_values = [
+    main_best_model.cv_results_["mean_test_score"][
+        main_best_model.best_index_
+    ],
+    job_best_model.cv_results_["mean_test_score"][
+        job_best_model.best_index_
+    ],
+]
+
+table = {"modèles": table_keys, "scores moyens": table_values}
+
+print(pd.DataFrame(table).to_markdown(index=False))
+
+```
+
+Le modèle sur jeu de données JOB uniquement présente une meilleure performance lorsqu'il s'agit de prédire les individus ayant un Job (`job_category` non `NA`).
+
+::: callout-note
+## **Choix du modèle final**
+
+Le **modèle final** sera donc une **combinaison MAIN+JOB**:
+
+-   Tous les individus sont prédits avec le meilleur modèle MAIN
+
+-   La prédiction des individus disposant d'un job (`job_category` non nul) est remplacée par la prédiction du meilleur modèle JOB.
+:::
+
+## Mesure de la performance
+
+```{python}
+#| include: false
+
+from sklearn.metrics import accuracy_score, confusion_matrix
+from sklearn.metrics import ConfusionMatrixDisplay, classification_report
+import matplotlib.pyplot as plt
+
+# Chargement de main_X_eval
+# -------------------------
+main_X_eval = load(f"{cst.MODELS_DIR}/{cst.JOBLIB_002_MAIN_X_EVAL}")
+
+# Chargement de main_y_eval
+# -------------------------
+main_y_eval = load(f"{cst.MODELS_DIR}/{cst.JOBLIB_002_MAIN_Y_EVAL}")
+
+# Chargement des prédictions de main_X_eval
+# -----------------------------------------
+main_only_y_eval_predictions = load(f"{cst.MODELS_DIR}/{cst.JOB_005_MAIN_ONLY_EVAL_PREDICTIONS}")
+job_only_y_eval_predictions = load(f"{cst.MODELS_DIR}/{cst.JOB_005_JOB_ONLY_EVAL_PREDICTIONS}")
+final_y_eval_predictions = load(f"{cst.MODELS_DIR}/{cst.JOB_005_FINAL_EVAL_PREDICTIONS}")
+
+```
+
+La mesure de la **performance du modèle combiné MAIN + JOB** est effectuée sur le **jeu de données X et y EVAL**.
+
+```{python}
+#| include: false
+
+accuracy_main_only = accuracy_score(y_pred=main_only_y_eval_predictions,
+                                    y_true=main_y_eval)
+
+
+job_X_eval = main_X_eval.loc[main_X_eval.job_category.isna()==False] # filtrage des individus avec job
+job_y_eval = main_y_eval.loc[job_X_eval.index]
+accuracy_job_only = accuracy_score(y_pred=job_only_y_eval_predictions,
+                                    y_true=job_y_eval)
+
+accuracy_final = accuracy_score(y_pred=final_y_eval_predictions,
+                                    y_true=main_y_eval)
+
+```
+
+```{python}
+#| echo: false
+#| output: asis
+#| eval: false
+
+print(f'- Performance du meilleur modèle **MAIN SEUL** ({main_best_model_name}) : **{accuracy_main_only*100:.2f}%** de bonnes prédictions')
+
+print(f'- Performance du meilleur modèle **JOB SEUL** ({job_best_model_name}) : **{accuracy_job_only*100:.2f}% de bonnes prédictions**')
+
+```
+
+::: callout-note
+## **Performance du modèle final**
+
+```{python}
+#| echo: false
+#| output: asis
+
+print(f'La performance attendue pour le **modèle combiné MAIN+JOB** est de **{accuracy_final*100:.2f}%** de bonnes prédictions')
+```
+:::
+
+## Analyse de la classification
+
+**Matrice de confusion sur le jeu de données d'évaluation**
+
+```{python}
+#| echo: false
+
+ConfusionMatrixDisplay.from_predictions(y_true=main_y_eval, 
+                                        y_pred=final_y_eval_predictions,
+                                        colorbar=False
+                                       )
+plt.show()
+
+```
+
+**Analyse de la classification**
+
+```{python}
+#| label: performance rapport de classification
+#| echo: false
+
+# Classification report
+# ---------------------
+report = classification_report(y_true=main_y_eval, y_pred=final_y_eval_predictions)
+print(report)
+
+```
+
+La matrice de confusion sur le jeu de données d'évaluation confirme globalement l'efficacité de la combinaison de modèles MAIN+JOB avec un **taux global de bonnes prédictions** **accuracy = (TP+TN)/(nb observations)** de **90%.**
+
+La **sensibilité/recall = TP / (TP+FN)** donne la capacité du modèle à détecter les positifs parmi l'ensemble des vrais positifs.
+
+-   Recall sur classe B = 93%
+
+-   Recall sur classe G = 86%
+
+-   Le modèle est **plus efficace à bien détecter les individus de classe B** que les individus de classe G.
+
+La **precision = TP / (TP+FP)** donne la pertinence de la prédiction du modèle quand il détecte une valeur positive. Autrement dit, il mesure la confiance qui peut être donnée au modèle lorsqu'il fait une prédiction positive.
+
+-   Précision sur classe B = 91%
+
+-   Précision sur classe G = 89%
+
+-   Le **modèle est équilibré** : qu'il détecte une classe B ou G, il ne se trompe qu'une fois sur 10.
+
+A noter que la "signification métier" de la variable cible est inconnue. De ce fait, aucune optimisation de la précision ou de la spécificité des classes a été opérée. Seul le score Accuracy a été considéré dans l'optimisation de la performance du modèle.
+
+## Importance des features
+
+On applique aux 2 meilleurs modèles une technique de **mesure d'importance des features par permutation**.
+
+**Importance des features dans le modèle MAIN (sans les colonnes Job)**
+
+```{python}
+#| label: permutation importance main GB
+#| echo: false
+
+from sklearn.inspection import permutation_importance
+from sklearn.utils import resample
+
+temp_X, temp_y = resample(main_X_eval, main_y_eval, n_samples=1000, stratify=main_y_eval, random_state=50) 
+
+result = permutation_importance(
+    main_fitted_gradient_boosting, 
+    temp_X, 
+    temp_y, 
+    scoring="accuracy", 
+    n_repeats=5, 
+    n_jobs=-2, 
+    random_state=50, 
+    # sample_weight=None, max_samples=1.0
+    )
+```
+
+```{python}
+#| label: permutation importance main GB display
+#| echo: false
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+sorted_idx = result.importances_mean.argsort()
+
+plt.subplot(1, 2, 2)
+plt.boxplot(
+    result.importances[sorted_idx].T,
+    vert=False,
+    labels=np.array(main_X_eval.columns)[sorted_idx],
+)
+plt.title("Permutation Importance (test set)")
+# fig.tight_layout()
+plt.show()
+
+```
+
+Parmi les features initiales avant feature engineering, les plus influentes sont
+
+-   `insee_code`, qui a permis d'introduire les **notions géographiques** (taille de la commune, distance avec la plus proche grande ville, département, région, nombre d'habitants)
+
+    -   cf. fonction `insee_code_fe` dans fichier *toolbox_feature_engineering.py*
+
+-   `household`, la composition du foyer (foyer célibataire, famille sans enfant, famille monoparentale)
+
+    -   cf. fonction `household_fe` dans fichier *toolbox_feature_engineering.py*
+
+-   `OCCUPATION_42`, catégorie socio-professionnelle de l'individu
+
+    -   cf. fonction `OCCUPATION_42_fe` dans fichier *toolbox_feature_engineering.py*
+
+-   `is_student`, qualité d'étudiant de l'individu
+
+    -   maintenu en état booléen dans le modèle
+
+-   `ACTIVITY_TYPE`, statut professionnel courant de l'individu (employé, chômeur, retraité, inactif)
+
+Le sexe, le niveau d'étude, l'âge, la nature du contrat de travail et la condition sportive ont une influence modérée ou nulle dans le modèle.
+
+**Importance des features dans le modèle JOB**
+
+```{python}
+#| label: filtrage des données Job
+#| include: false
+
+from sklearn.inspection import permutation_importance
+from sklearn.utils import resample
+
+job_X_eval = main_X_eval.loc[main_X_eval.job_category.isna()==False]
+job_y_eval = main_y_eval.loc[job_X_eval.index]
+```
+
+```{python}
+#| label: permutation importance job GB 
+#| include: false
+
+temp_X, temp_y = resample(job_X_eval, job_y_eval, n_samples=500, stratify=job_y_eval, random_state=50) 
+
+result = permutation_importance(
+    job_fitted_gradient_boosting, 
+    temp_X, 
+    temp_y, 
+    scoring="accuracy", 
+    n_repeats=5, 
+    n_jobs=-2, 
+    random_state=50, 
+    # sample_weight=None, max_samples=1.0
+    )
+```
+
+```{python}
+#| label: permutation importance job GB display
+#| echo: false
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+sorted_idx = result.importances_mean.argsort()
+
+plt.subplot(1, 2, 2)
+plt.boxplot(
+    result.importances[sorted_idx].T,
+    vert=False,
+    labels=np.array(main_X_eval.columns)[sorted_idx],
+)
+plt.title("Permutation Importance (test set)")
+# fig.tight_layout()
+plt.show()
+
+```
+
+Parmi les features initiales importantes dans le modèle JOB, on retrouve les features `insee_code`, `household` et `OCCUPATION_42`.
+
+On note cependant que la feature `ACTIVITY_TYPE` perd de son influence, au profit des features issues du jeu de données Job affinant les informations relatives au travail de l'individu:
+
+-   `WORK_CONDITION`, qualifiant le contrat de travail en "temps partiel"/"temps complet"
+
+    -   cf. fonction `work_condition_fe` dans fichier *toolbox_feature_engineering_job.py*
+
+-   `EMOLUMENT`, le salaire de l'individu
+
+    -   cf. fonction `emolument_fe` dans fichier *toolbox_feature_engineering_job.py*
+
+-   `EMPLOYEE_COUNT`, codification de la taille de l'établissement employant l'individu
+
+    -   cf. fonction `employee_count_fe` dans fichier *toolbox_feature_engineering.py*
+
+Il est intéressant de noter que la feature `sex` à influence modérée dans le modèle MAIN prend de l'importance dans le modèle JOB.
